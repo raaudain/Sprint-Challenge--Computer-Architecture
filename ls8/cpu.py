@@ -19,6 +19,10 @@ class CPU:
         self.pop = 0b01000110
         self.call = 0b01010000
         self.ret = 0b00010001
+        self.cmp = 0b10100111
+        self.jmp = 0b01010100
+        self.jeq = 0b01010101
+        self.jne = 0b01010110
         self.running = True
         self.branchtable = {
             self.ldi: self.handle_load_immediate,
@@ -29,10 +33,15 @@ class CPU:
             self.pop: self.handle_pop,
             self.call: self.handle_call,
             self.ret: self.handle_return,
-            self.add: self.handle_add
+            self.add: self.handle_add,
+            self.cmp: self.handle_compare,
+            self.jmp: self.handle_jump,
+            self.jeq: self.handle_jeq,
+            self.jne: self.handle_jne
         }
         self.sp = 7 # Stack Pointer
         self.reg[self.sp] = 0xFF # Used to keep register values between 0-255
+        self.flag = 0 # FL bits: 00000LGE
         
 
         
@@ -61,6 +70,18 @@ class CPU:
             self.reg[reg_a] -= self.reg[reg_b]
         elif op == "DIV":
             self.reg[reg_a] /= self.reg[reg_b]
+        elif op == "CMP":
+            if self.reg[reg_a] == self.reg[reg_b]:
+                # Set E Flag to 1: 00000001
+                self.flag = 1
+            elif self.reg[reg_a] < self.reg[reg_b]:
+                # Set L Flag to 1: 00000100
+                self.flag = 4
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                # Set G Flag to 1: 00000010
+                self.flag = 2
+            else:
+                self.flag = 0
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -166,12 +187,12 @@ class CPU:
         
         self.pc = destination_address
         
-        print("REG", self.reg)
-        print("RAM", self.ram)
-        print("SP", self.sp)
-        print("Return address", return_address)
-        print("register_number", register_number)
-        print("destination_address", destination_address)
+        # print("REG", self.reg)
+        # print("RAM", self.ram)
+        # print("SP", self.sp)
+        # print("Return address", return_address)
+        # print("register_number", register_number)
+        # print("destination_address", destination_address)
     
     def handle_return(self):
         # Pop returns address from top of stack
@@ -189,6 +210,42 @@ class CPU:
         # print("register_number", register_number)
         # print("destination_address", destination_address)
         
+    def handle_compare(self):
+        operand_a = self.ram_read(self.pc+1)
+        operand_b = self.ram_read(self.pc+2)
+        
+        self.alu("CMP", operand_a, operand_b)
+        
+        self.pc += 3
+        
+    def handle_jump(self):
+        # Jump to the address stored in the given register
+        operand_a = self.ram_read(self.pc+1)
+        address = self.reg[operand_a]
+        
+        # Set the program counter the address stored in the given register
+        self.pc = address
+    
+    def handle_jeq(self):
+        # If equal (E) flag is set to true (1)
+        if self.flag == 1:
+            # Jump to the address stored in the given register
+            self.handle_jump()
+            
+        else:
+            self.pc += 2
+    
+    def handle_jne(self):
+        # If E flag is clear (false, 0)
+        # How to clear bit flag: x & ~y
+        # &: Each bit of the output is 1 if the corresponding bit of x AND of y is 1, otherwise it's 0. 
+        # ~: Switches each 1 for a 0 and each 0 for a 1.
+        if self.flag & ~1:
+            # jump to the address stored in the given register.
+            self.handle_jump()
+        else:
+            self.pc += 2
+    
     def run(self):
         """Run the CPU."""
 
